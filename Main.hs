@@ -1,5 +1,8 @@
 module Main where
 
+import Debug.Trace (traceShow)
+import Data.Maybe (fromMaybe)
+
 {--
 Grammar:
 prog = expr
@@ -10,17 +13,17 @@ factor = NUM
 
 import Data.Char (isDigit)
 
-data TkType = T_Int
-            | T_Op
-            | T_Lparen
-            | T_Rparen
+data TkType = TInt
+            | TOp
+            | TLparen
+            | TRparen
             deriving (Show)
 
 data Tk = Tk { name  :: TkType 
              , value :: String }
 
 instance Show Tk where
-  show (Tk n v) = " "++show n++" "++v++"\n"
+  show (Tk n v) = " "++(show n)++" "++v++"\n"
 
 isOperator :: Char -> Bool
 isOperator = flip elem ['+', '-', '*', '/']
@@ -29,53 +32,85 @@ isOperator = flip elem ['+', '-', '*', '/']
 lexer :: String -> [Tk]
 lexer "" = []
 lexer (x:xs)
-  | isDigit x    = Tk T_Int (x : takeWhile isDigit xs) : lexer (dropWhile isDigit xs)
-  | isOperator x = Tk T_Op [x] : lexer xs
-  | x == '('     = Tk T_Lparen [x] : lexer xs
-  | x == ')'     = Tk T_Rparen [x] : lexer xs
+  | isDigit x    = Tk TInt (x : takeWhile isDigit xs) : lexer (dropWhile isDigit xs)
+  | isOperator x = Tk TOp [x] : lexer xs
+  | x == '('     = Tk TLparen [x] : lexer xs
+  | x == ')'     = Tk TRparen [x] : lexer xs
   | otherwise    = error "Unknown symbol" 
 
-data AST = Num    Float
-         | Plus   AST AST
-         | Minus  AST AST
-         | Mul    AST AST
-         | Div    AST AST
+data AST = Num Float
+         | Plus AST AST
+         | Minus AST AST
+         | Mul AST AST
+         | Div AST AST
          | UMinus AST
-         | Paren  AST
+         | Paren AST
+         | End
          deriving (Show)
 
+{-
 expr :: [Tk] -> (AST, [Tk])
 expr [] = error "Unexpected EOF while parsing"
 
-expr (Tk T_Int v : Tk T_Op op : xs) =
+expr (Tk TInt v : Tk TOp op : xs) =
   let e1 = Num (read v)
       (e2, xs') = term xs
   in  case op of
         "+" -> (Plus e1 e2, xs')
         "-" -> (Minus e1 e2, xs')
 
-expr (Tk T_Op "-" : xs) =
+expr (Tk TOp "-" : xs) =
   let (e, xs') = expr xs
   in  (UMinus e, xs')
 
-expr (Tk T_Int v : xs) = (Num (read v), xs)
+expr (Tk TInt v : xs) = (Num (read v), xs)
 expr _ = error "Syntax error"
 
 term :: [Tk] -> (AST, [Tk])
 term [] = error "Unexpected EOF while parsing"
-term (Tk T_Int v : Tk T_Op op : xs) =
+term (Tk TInt v : Tk TOp op : xs) =
   let e1 = Num (read v)
       (e2, xs') = factor xs
   in  case op of
         "*" -> (Mul e1 e2, xs')
         "/" -> (Div e1 e2, xs')
 
-term (Tk T_Int v : xs) = (Num (read v), xs)
+term (Tk TInt v : xs) = (Num (read v), xs)
 term _ = error "Syntax error"
 
 factor :: [Tk] -> (AST, [Tk])
 factor [] = error "Unexpected EOF while parsing"
-factor (Tk T_Int v : xs) = (Num (read v), xs)
+factor (Tk TInt v : xs) = (Num (read v), xs)
+-}
+
+{-
+Grammar:
+prog = expr
+expr = NUM ((PLUS | MINUS) NUM)*
+
+-}
+
+peek :: [Tk] -> Maybe Tk
+peek [] = Nothing
+peek (x:_) = Just x
+
+expr [] = (End, [])
+expr xs = 
+  let (e1, xs') = term xs
+      op = value (head xs')
+  in  case op of
+        "+" -> let (e2, xs'') = expr (tail xs') in (Plus e1 e2, xs'')
+        "-" -> let (e2, xs'') = expr (tail xs') in (Minus e1 e2, xs'')
+
+term xs = 
+  let (e1, xs') = factor xs
+      op = value (head xs')
+  in  case op of
+        "*" -> let (e2, xs'') = term (tail xs') in (Plus e1 e2, xs'')
+        "/" -> let (e2, xs'') = term (tail xs') in (Minus e1 e2, xs'')
+
+factor [] = error "Unexpected EOF while parsing"
+factor (Tk TInt v : xs) = (Num (read v), xs)
 
 {-
  - Grammar
@@ -111,12 +146,15 @@ eval (UMinus e) =
   let n = eval e
   in  -n
 
---TESTING
-ast :: String -> (AST, [Tk])
+-- TESTING
 ast = expr . lexer
-calc :: String -> Float
 calc = eval . fst . ast
 
+test :: Bool
+test =
+  calc "1+1"   == 2.0 &&
+  calc "1+2*3" == 7.0 &&
+  calc "2*3+1" == 7.0
 
 main :: IO ()
 main = putStrLn "Hello, world!"
