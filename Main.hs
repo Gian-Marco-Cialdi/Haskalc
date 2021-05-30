@@ -1,22 +1,16 @@
 module Main where
 
-import Debug.Trace (traceShow)
-import Data.Maybe (fromMaybe)
-
-{--
-Grammar:
-prog = expr
-expr = term ((PLUS | MINUS) term)*
-term = factor ((MUL | DIV) factor)*
-factor = NUM
---}
-
 import Data.Char (isDigit)
+
+-----------
+-- Lexer --
+-----------
 
 data TkType = TInt
             | TOp
             | TLparen
             | TRparen
+            | TEof
             deriving (Show)
 
 data Tk = Tk { name  :: TkType 
@@ -28,16 +22,20 @@ instance Show Tk where
 isOperator :: Char -> Bool
 isOperator = flip elem ['+', '-', '*', '/']
 
--- Lexer
-lexer :: String -> [Tk]
-lexer "" = []
-lexer (x:xs)
-  | isDigit x    = Tk TInt (x : takeWhile isDigit xs) : lexer (dropWhile isDigit xs)
-  | isOperator x = Tk TOp [x] : lexer xs
-  | x == '('     = Tk TLparen [x] : lexer xs
-  | x == ')'     = Tk TRparen [x] : lexer xs
+scan :: String -> [Tk]
+scan "" = [Tk TEof ""]
+scan (x:xs)
+  | isDigit x    = Tk TInt (x : takeWhile isDigit xs) : scan (dropWhile isDigit xs)
+  | isOperator x = Tk TOp [x] : scan xs
+  | x == '('     = Tk TLparen [x] : scan xs
+  | x == ')'     = Tk TRparen [x] : scan xs
   | otherwise    = error "Unknown symbol" 
 
+------------
+-- Parser --
+------------
+
+-- AST: Abstract Syntax Tree
 data AST = Num Float
          | Plus AST AST
          | Minus AST AST
@@ -45,85 +43,42 @@ data AST = Num Float
          | Div AST AST
          | UMinus AST
          | Paren AST
-         | End
          deriving (Show)
 
 {-
-expr :: [Tk] -> (AST, [Tk])
-expr [] = error "Unexpected EOF while parsing"
-
-expr (Tk TInt v : Tk TOp op : xs) =
-  let e1 = Num (read v)
-      (e2, xs') = term xs
-  in  case op of
-        "+" -> (Plus e1 e2, xs')
-        "-" -> (Minus e1 e2, xs')
-
-expr (Tk TOp "-" : xs) =
-  let (e, xs') = expr xs
-  in  (UMinus e, xs')
-
-expr (Tk TInt v : xs) = (Num (read v), xs)
-expr _ = error "Syntax error"
-
-term :: [Tk] -> (AST, [Tk])
-term [] = error "Unexpected EOF while parsing"
-term (Tk TInt v : Tk TOp op : xs) =
-  let e1 = Num (read v)
-      (e2, xs') = factor xs
-  in  case op of
-        "*" -> (Mul e1 e2, xs')
-        "/" -> (Div e1 e2, xs')
-
-term (Tk TInt v : xs) = (Num (read v), xs)
-term _ = error "Syntax error"
-
-factor :: [Tk] -> (AST, [Tk])
-factor [] = error "Unexpected EOF while parsing"
-factor (Tk TInt v : xs) = (Num (read v), xs)
+  Grammar:
+    program = expr
+    expr = term ((PLUS | MINUS) term)*
+    term = factor ((MUL | DIV) factor)*
+    factor = NUM
 -}
 
-{-
-Grammar:
-prog = expr
-expr = NUM ((PLUS | MINUS) NUM)*
-
--}
-
-peek :: [Tk] -> Maybe Tk
-peek [] = Nothing
-peek (x:_) = Just x
-
-expr [] = (End, [])
+expr [Tk TEof ""] = error "Unexpected EOF while parsing"
 expr xs = 
   let (e1, xs') = term xs
-      op = value (head xs')
+      op = value (head xs') -- Peeks a token and takes its value
   in  case op of
         "+" -> let (e2, xs'') = expr (tail xs') in (Plus e1 e2, xs'')
         "-" -> let (e2, xs'') = expr (tail xs') in (Minus e1 e2, xs'')
+        _   -> (e1, xs') -- No operator left, return the AST
 
+term [Tk TEof ""] = error "Unexpected EOF while parsing"
 term xs = 
   let (e1, xs') = factor xs
       op = value (head xs')
   in  case op of
-        "*" -> let (e2, xs'') = term (tail xs') in (Plus e1 e2, xs'')
-        "/" -> let (e2, xs'') = term (tail xs') in (Minus e1 e2, xs'')
+        "*" -> let (e2, xs'') = term (tail xs') in (Mul e1 e2, xs'')
+        "/" -> let (e2, xs'') = term (tail xs') in (Div e1 e2, xs'')
+        _    -> (e1, xs')
 
-factor [] = error "Unexpected EOF while parsing"
+factor [Tk TEof ""] = error "Unexpected EOF while parsing"
 factor (Tk TInt v : xs) = (Num (read v), xs)
 
-{-
- - Grammar
- - expr = NUM ((PLUS | MINUS) NUM)*
- -}
-{-
-$ 2 + 2 * 3 + 4
-=> WRONG   (2 + (2 * (3 + 4)))
-=> CORRECT (2 + ((2 * 3) + 4))
-=> CORRECT (+ 2 (+ (* 2 3) 4))
+-----------------
+-- Interpreter --
+-----------------
 
---}
-
+-- Evaluates an AST
 eval :: AST -> Float
 eval (Num x) = x
 eval (Plus e1 e2) =
@@ -146,8 +101,11 @@ eval (UMinus e) =
   let n = eval e
   in  -n
 
--- TESTING
-ast = expr . lexer
+-------------
+-- TESTING --
+-------------
+
+ast = expr . scan
 calc = eval . fst . ast
 
 test :: Bool
@@ -156,29 +114,10 @@ test =
   calc "1+2*3" == 7.0 &&
   calc "2*3+1" == 7.0
 
+
+----------------
+-- Dummy main --
+----------------
+ 
 main :: IO ()
-main = putStrLn "Hello, world!"
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+main = putStrLn "Hello, Haskalc!"
