@@ -50,7 +50,7 @@ data AST = Num Float
     program = expr
     expr = term ((PLUS | MINUS) term)*
     term = factor ((MUL | DIV) factor)*
-    factor = NUM
+    factor = NUM | LPAREN expr RPAREN
 -}
 
 expr [Tk TEof ""] = error "Unexpected EOF while parsing"
@@ -73,7 +73,13 @@ term xs =
 
 factor [Tk TEof ""] = error "Unexpected EOF while parsing"
 factor (Tk TInt v : xs) = (Num (read v), xs)
-
+factor (Tk TLparen _ : xs) =
+  let (e, xs') = expr xs
+      t = name $ head xs'
+  in  case t of
+        TRparen -> (e, tail xs')
+        _       -> error "Unclosed parenthesis"
+        
 -----------------
 -- Interpreter --
 -----------------
@@ -110,9 +116,12 @@ calc = eval . fst . ast
 
 test :: Bool
 test =
-  calc "1+1"   == 2.0 &&
-  calc "1+2*3" == 7.0 &&
-  calc "2*3+1" == 7.0
+  calc "1+1"         == 2.0  &&
+  calc "1+2*3"       == 7.0  &&
+  calc "2*3+1"       == 7.0  &&
+  calc "2*(3+3)"     == 12.0 &&
+  calc "2+(3+3)"     == 8.0  &&
+  calc "2+(3+1)*2+4" == 14.0
 
 
 ----------------
