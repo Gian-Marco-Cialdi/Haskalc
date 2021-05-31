@@ -1,6 +1,6 @@
 module Main where
 
-import Data.Char (isDigit)
+import Data.Char (isDigit, isAlpha, isAlphaNum)
 
 -----------
 -- Lexer --
@@ -11,6 +11,8 @@ data TkType = TNum
             | TLparen
             | TRparen
             | TEof
+            | TIdent
+            | TString
             deriving (Show)
 
 data Tk = Tk { name  :: TkType 
@@ -31,15 +33,22 @@ takeNum xs
 isOperator :: Char -> Bool
 isOperator = flip elem ['+', '-', '*', '/']
 
+takeString :: String -> String
+takeString [] = error "Unterminated string"
+takeString ('"' : _) = ['"']
+takeString (x:xs) = x : takeString xs
+
 scan :: String -> [Tk]
 scan "" = [Tk TEof ""]
 scan (x:xs)
-  | isDigit x    = let tn = takeNum xs in Tk TNum (x : tn) : scan (drop (length tn) xs)
+  | isDigit x    = let ys = takeNum xs in Tk TNum (x:ys) : scan (drop (length ys) xs)
   | isOperator x = Tk TOp [x] : scan xs
   | x == '('     = Tk TLparen [x] : scan xs
   | x == ')'     = Tk TRparen [x] : scan xs
+  | isAlpha x    = let ys = x : takeWhile isAlphaNum (xs) in Tk TIdent ys : scan (drop (length ys - 1) xs)
+  | x == '"'     = let ys = takeString xs in Tk TString (x : ys) : scan (drop (length ys) xs)
   | otherwise    = error $ "Unknown symbol: '" ++ [x] ++ "'"
-
+--
 ------------
 -- Parser --
 ------------
