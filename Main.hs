@@ -19,36 +19,39 @@ data Tk = Tk { name  :: TkType
              , value :: String }
 
 instance Show Tk where
-  show (Tk n v) = " "++(show n)++" "++v++"\n"
+  show (Tk n v) = " "++show n++" "++v++"\n"
 
 takeNum :: String -> String
-takeNum xs
-  | all isDigit xs = xs
-  | otherwise = let ds = takeWhile isDigit xs 
-                    (e:es) = drop (length ds) xs 
-                in  if e == '.' && (not . null $ es)
-                      then ds ++ "." ++ takeWhile isDigit es
-                      else ds
-
-isOperator :: Char -> Bool
-isOperator = flip elem ['+', '-', '*', '/']
+takeNum [] = []
+takeNum (x : '.' : xs) = 
+  let ys = takeWhile isDigit xs in
+  if not . null $ ys
+    then x : '.' : ys
+    else error "No digits after dot"
+takeNum (x:xs) = 
+  if isDigit x
+    then x : takeNum xs
+    else []
 
 takeString :: String -> String
 takeString [] = error "Unterminated string"
 takeString ('"' : _) = ['"']
 takeString (x:xs) = x : takeString xs
 
+isOperator :: Char -> Bool
+isOperator = flip elem ['+', '-', '*', '/']
+
 scan :: String -> [Tk]
 scan "" = [Tk TEof ""]
 scan (x:xs)
-  | isDigit x    = let ys = takeNum xs in Tk TNum (x:ys) : scan (drop (length ys) xs)
+  | isDigit x    = let ys = takeNum (x:xs) in Tk TNum ys : scan (drop (length ys - 1) xs)
   | isOperator x = Tk TOp [x] : scan xs
   | x == '('     = Tk TLparen [x] : scan xs
   | x == ')'     = Tk TRparen [x] : scan xs
-  | isAlpha x    = let ys = x : takeWhile isAlphaNum (xs) in Tk TIdent ys : scan (drop (length ys - 1) xs)
+  | isAlpha x    = let ys = x : takeWhile isAlphaNum xs in Tk TIdent ys : scan (drop (length ys - 1) xs)
   | x == '"'     = let ys = takeString xs in Tk TString (x : ys) : scan (drop (length ys) xs)
   | otherwise    = error $ "Unknown symbol: '" ++ [x] ++ "'"
---
+
 ------------
 -- Parser --
 ------------
@@ -70,6 +73,7 @@ data AST = Num Float
     factor = (PLUS|MINUS) NUM | NUM | LPAREN expr RPAREN
 -}
 
+expr, term, factor :: [Tk] -> (AST, [Tk])
 expr [Tk TEof ""] = error "Unexpected EOF while parsing"
 expr xs = 
   let (e1, xs') = term xs
@@ -130,7 +134,9 @@ eval (UMinus e) =
 -- TESTING --
 -------------
 
+ast :: String -> (AST, [Tk])
 ast = expr . scan
+calc :: String -> Float
 calc = eval . fst . ast
 
 test :: Bool
