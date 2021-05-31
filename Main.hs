@@ -6,7 +6,7 @@ import Data.Char (isDigit)
 -- Lexer --
 -----------
 
-data TkType = TInt
+data TkType = TNum
             | TOp
             | TLparen
             | TRparen
@@ -19,17 +19,26 @@ data Tk = Tk { name  :: TkType
 instance Show Tk where
   show (Tk n v) = " "++(show n)++" "++v++"\n"
 
+takeNum :: String -> String
+takeNum xs
+  | all isDigit xs = xs
+  | otherwise = let ds = takeWhile isDigit xs 
+                    (e:es) = drop (length ds) xs 
+                in  if e == '.' && (not . null $ es)
+                      then ds ++ "." ++ takeWhile isDigit es
+                      else ds
+
 isOperator :: Char -> Bool
 isOperator = flip elem ['+', '-', '*', '/']
 
 scan :: String -> [Tk]
 scan "" = [Tk TEof ""]
 scan (x:xs)
-  | isDigit x    = Tk TInt (x : takeWhile isDigit xs) : scan (dropWhile isDigit xs)
+  | isDigit x    = let tn = takeNum xs in Tk TNum (x : tn) : scan (drop (length tn) xs)
   | isOperator x = Tk TOp [x] : scan xs
   | x == '('     = Tk TLparen [x] : scan xs
   | x == ')'     = Tk TRparen [x] : scan xs
-  | otherwise    = error "Unknown symbol" 
+  | otherwise    = error $ "Unknown symbol: '" ++ [x] ++ "'"
 
 ------------
 -- Parser --
@@ -42,7 +51,6 @@ data AST = Num Float
          | Mul AST AST
          | Div AST AST
          | UMinus AST
-         | Paren AST
          deriving (Show)
 
 {-
@@ -50,7 +58,7 @@ data AST = Num Float
     program = expr
     expr = term ((PLUS | MINUS) term)*
     term = factor ((MUL | DIV) factor)*
-    factor = NUM | LPAREN expr RPAREN
+    factor = (PLUS|MINUS) NUM | NUM | LPAREN expr RPAREN
 -}
 
 expr [Tk TEof ""] = error "Unexpected EOF while parsing"
@@ -72,7 +80,9 @@ term xs =
         _    -> (e1, xs')
 
 factor [Tk TEof ""] = error "Unexpected EOF while parsing"
-factor (Tk TInt v : xs) = (Num (read v), xs)
+factor (Tk TNum v : xs) = (Num (read v), xs)
+factor (Tk TOp "-" : xs) = 
+  let (e, xs') = factor xs in (UMinus e, xs')
 factor (Tk TLparen _ : xs) =
   let (e, xs') = expr xs
       t = name $ head xs'
@@ -121,7 +131,8 @@ test =
   calc "2*3+1"       == 7.0  &&
   calc "2*(3+3)"     == 12.0 &&
   calc "2+(3+3)"     == 8.0  &&
-  calc "2+(3+1)*2+4" == 14.0
+  calc "2+(3+1)*2+4" == 14.0 &&
+  calc "2.2+(3.3+3)" == 8.5
 
 
 ----------------
