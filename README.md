@@ -3,7 +3,7 @@ A text calculator (that also supports trigonometric functions) written in Haskel
 
 ## Usage
 From any terminal that you fancy:
-```calc "*expression*"```
+```calc "<expression>"```
 
 The result will be printed on screen.
 
