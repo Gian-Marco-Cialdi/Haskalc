@@ -14,7 +14,6 @@ data TkType = TNum
             | TRparen
             | TEof
             | TIdent
-            | TString
             deriving (Show)
 
 data Tk = Tk { name  :: TkType 
@@ -35,10 +34,6 @@ takeNum (x:xs) =
     then x : takeNum xs
     else []
 
-takeString :: String -> String
-takeString [] = error "Unterminated string"
-takeString ('"' : _) = ['"']
-takeString (x:xs) = x : takeString xs
 
 isOperator :: Char -> Bool
 isOperator = flip elem ['+', '-', '*', '/']
@@ -51,7 +46,6 @@ scan (x:xs)
   | x == '('     = Tk TLparen [x] : scan xs
   | x == ')'     = Tk TRparen [x] : scan xs
   | isAlpha x    = let ys = x : takeWhile isAlphaNum xs in Tk TIdent ys : scan (drop (length ys - 1) xs)
-  | x == '"'     = let ys = takeString xs in Tk TString (x : ys) : scan (drop (length ys) xs)
   | otherwise    = error $ "Unknown symbol: '" ++ [x] ++ "'"
 
 ------------
@@ -73,7 +67,7 @@ data AST = Num Float
     program = expr
     expr = term ((PLUS | MINUS) term)*
     term = factor ((MUL | DIV) factor)*
-    factor = (PLUS|MINUS) NUM | NUM | LPAREN expr RPAREN | fn_call
+    factor = MINUS NUM | NUM | LPAREN expr RPAREN | fn_call
     fn_call = IDENT LPAREN expr RPAREN
 -}
 
@@ -117,6 +111,7 @@ factor _ = error "Syntax error"
 -----------------
 
 -- List of built-in functions
+fns :: [(String, Float -> Float)]
 fns = [ ("sin", sin)
       , ("cos", cos)
       , ("tan", tan)
@@ -149,36 +144,19 @@ eval (UMinus e) =
   in  -n
 eval (FnCall i arg) =
   let a = eval arg
-  in  (findFn i) a
+  in  findFn i a
 
+findFn :: [Char] -> Float -> Float
 findFn x = 
   let m = lookup x fns
   in  fromMaybe (error $ "Function not found: '" ++ x ++ "'") m
 
--------------
--- Testing --
--------------
-
-ast :: String -> (AST, [Tk])
-ast = expr . scan
-calc :: String -> Float
-calc = eval . fst . ast
-
-test :: Bool
-test =
-  calc "1+1"         == 2.0  &&
-  calc "1+2*3"       == 7.0  &&
-  calc "2*3+1"       == 7.0  &&
-  calc "2*(3+3)"     == 12.0 &&
-  calc "2+(3+3)"     == 8.0  &&
-  calc "2+(3+1)*2+4" == 14.0 &&
-  calc "2.2+(3.3+3)" == 8.5  &&
-  calc "2+cos(0.0)"  == 3.0
-
-
 ----------
 -- Main --
 ----------
+calc :: String -> Float
+calc = eval . fst . expr . scan
+
 removeQuotes :: String -> String
 removeQuotes = filter (/= '"')
 
