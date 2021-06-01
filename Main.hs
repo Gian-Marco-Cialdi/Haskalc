@@ -1,6 +1,7 @@
 module Main where
 
 import Data.Char (isDigit, isAlpha, isAlphaNum)
+import Data.Maybe (fromMaybe)
 
 -----------
 -- Lexer --
@@ -63,6 +64,7 @@ data AST = Num Float
          | Mul AST AST
          | Div AST AST
          | UMinus AST
+         | FnCall String AST -- name, args
          deriving (Show)
 
 {-
@@ -70,14 +72,15 @@ data AST = Num Float
     program = expr
     expr = term ((PLUS | MINUS) term)*
     term = factor ((MUL | DIV) factor)*
-    factor = (PLUS|MINUS) NUM | NUM | LPAREN expr RPAREN
+    factor = (PLUS|MINUS) NUM | NUM | LPAREN expr RPAREN | fn_call
+    fn_call = IDENT LPAREN expr RPAREN
 -}
 
 expr, term, factor :: [Tk] -> (AST, [Tk])
 expr [Tk TEof ""] = error "Unexpected EOF while parsing"
 expr xs = 
   let (e1, xs') = term xs
-      op = value (head xs') -- Peeks a token and takes its value
+      op = value (head xs')
   in  case op of
         "+" -> let (e2, xs'') = expr (tail xs') in (Plus e1 e2, xs'')
         "-" -> let (e2, xs'') = expr (tail xs') in (Minus e1 e2, xs'')
@@ -97,15 +100,29 @@ factor (Tk TNum v : xs) = (Num (read v), xs)
 factor (Tk TOp "-" : xs) = 
   let (e, xs') = factor xs in (UMinus e, xs')
 factor (Tk TLparen _ : xs) =
-  let (e, xs') = expr xs
-      t = name $ head xs'
+  let (e, Tk t _ : xs') = expr xs
   in  case t of
-        TRparen -> (e, tail xs')
+        TRparen -> (e, xs')
         _       -> error "Unclosed parenthesis"
+factor (Tk TIdent i : Tk TLparen _ : xs) = 
+  let (e, Tk t _ : xs') = expr xs
+  in  case t of
+        TRparen -> (FnCall i e, xs')
+        _       -> error $ "Unclosed parenthesis in function: '" ++ i ++ "'"
+factor _ = error "Syntax error"
         
 -----------------
 -- Interpreter --
 -----------------
+
+-- List of built-in functions
+fns = [ ("sin", sin)
+      , ("cos", cos)
+      , ("tan", tan)
+      , ("sinh", sinh)
+      , ("cosh", cosh)
+      , ("tanh", tanh)
+      , ("log", log) ]
 
 -- Evaluates an AST
 eval :: AST -> Float
@@ -129,6 +146,13 @@ eval (Div e1 e2) =
 eval (UMinus e) =
   let n = eval e
   in  -n
+eval (FnCall i arg) =
+  let a = eval arg
+  in  (findFn i) a
+
+findFn x = 
+  let m = lookup x fns
+  in  fromMaybe (error $ "Function not found: '" ++ x ++ "'") m
 
 -------------
 -- TESTING --
@@ -147,7 +171,8 @@ test =
   calc "2*(3+3)"     == 12.0 &&
   calc "2+(3+3)"     == 8.0  &&
   calc "2+(3+1)*2+4" == 14.0 &&
-  calc "2.2+(3.3+3)" == 8.5
+  calc "2.2+(3.3+3)" == 8.5  &&
+  calc "2+cos(0.0)"  == 3.0
 
 
 ----------------
