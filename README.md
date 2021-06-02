@@ -15,6 +15,6 @@ At the moment, this program must be built from source, but it has only one sourc
 Steps:
 1. Clone repository;
 2. Inside the repo directory, type:  
-```mkdir bin```
+```mkdir bin```  
 and:  
 ```ghc src/Main.hs -o bin/calc```  
