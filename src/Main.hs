@@ -42,6 +42,7 @@ scan :: String -> [Tk]
 scan "" = [Tk TEof ""]
 scan (x:xs)
   | isDigit x    = let ys = takeNum (x:xs) in Tk TNum ys : scan (drop (length ys - 1) xs)
+  | x == ' '     = scan xs
   | isOperator x = Tk TOp [x] : scan xs
   | x == '('     = Tk TLparen [x] : scan xs
   | x == ')'     = Tk TRparen [x] : scan xs
